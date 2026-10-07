@@ -27,7 +27,7 @@ jobs:
           xcodebuild -version
 
       - name: Instalar dependencias npm
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Compilar proyecto Vite (Web Release)
         run: npm run build
