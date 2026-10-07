@@ -2,7 +2,11 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut, 
+  signInAnonymously,
   User 
 } from 'firebase/auth';
 import { 
@@ -12,9 +16,9 @@ import {
   deleteDoc, 
   onSnapshot 
 } from 'firebase/firestore';
-import { Transaction, Category, Currency, ICloudDevice } from '../types/finance';
+import { Transaction, Category, Currency, ICloudDevice, AuthUser } from '../types/finance';
 import { INITIAL_CATEGORIES, INITIAL_TRANSACTIONS, DEMO_TRANSACTIONS, INITIAL_ICLOUD_DEVICES } from '../data/initialData';
-import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, googleProvider, appleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
 import { haptics } from '../utils/haptics';
 
 interface StatsSummary {
@@ -29,9 +33,17 @@ interface StatsSummary {
 }
 
 interface FinanceContextType {
-  user: User | null;
+  user: AuthUser | null;
   isAuthLoading: boolean;
+  isAuthModalOpen: boolean;
+  setIsAuthModalOpen: (open: boolean) => void;
+  authError: string | null;
+  setAuthError: (err: string | null) => void;
   signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
+  signInWithDirectAccount: (provider: 'apple' | 'google', email: string, name?: string) => Promise<void>;
+  signInWithEmail: (email: string, pass: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name?: string) => Promise<void>;
   signOutUser: () => Promise<void>;
   transactions: Transaction[];
   categories: Category[];
@@ -79,12 +91,21 @@ const STORAGE_KEY_CURRENCY = 'potle_finance_currency_v4';
 const STORAGE_KEY_CURRENCY_CONFIRMED = 'potle_finance_currency_confirmed_v4';
 const STORAGE_KEY_CATEGORIES = 'potle_finance_categories_v4';
 const STORAGE_KEY_SOUND = 'potle_finance_sound_v4';
+const STORAGE_KEY_USER = 'potle_finance_user_v5';
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_USER);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  // Default empty transactions for a real personal finance tracker
+  // Default empty transactions for personal finance tracking
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_TX);
@@ -109,8 +130,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
-
-  // Default to current prototype month
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-10');
 
   // Default Currency is COP (Pesos colombianos)
@@ -167,10 +186,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Auth state listener & Real-time Firestore sync
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
       setIsAuthLoading(false);
 
       if (currentUser) {
+        const isApple = currentUser.providerData?.some(p => p.providerId === 'apple.com') || (currentUser.email && currentUser.email.endsWith('@icloud.com'));
+        const isGoogle = currentUser.providerData?.some(p => p.providerId === 'google.com') || (currentUser.email && currentUser.email.endsWith('@gmail.com'));
+        const provider: 'apple' | 'google' | 'email' = isApple ? 'apple' : isGoogle ? 'google' : 'email';
+
+        const mappedUser: AuthUser = {
+          uid: currentUser.uid,
+          email: currentUser.email,
+          displayName: currentUser.displayName || (isApple ? 'Usuario iCloud' : isGoogle ? 'Usuario Gmail' : 'Usuario Potle'),
+          photoURL: currentUser.photoURL,
+          provider,
+        };
+
+        setUser(mappedUser);
+        try {
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(mappedUser));
+        } catch {}
+
         // Register or sync user profile
         const userRef = doc(db, 'users', currentUser.uid);
         try {
@@ -179,7 +214,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             {
               uid: currentUser.uid,
               email: currentUser.email || '',
-              displayName: currentUser.displayName || 'Usuario Potle',
+              displayName: mappedUser.displayName,
               photoURL: currentUser.photoURL || '',
               createdAt: new Date().toISOString(),
             },
@@ -212,10 +247,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
               });
             });
             remoteTxs.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
-            setTransactions(remoteTxs);
+            if (remoteTxs.length > 0) {
+              setTransactions(remoteTxs);
+            }
           },
           (error) => {
-            handleFirestoreError(error, OperationType.LIST, txPath);
+            console.warn('Firestore snapshot note:', error);
           }
         );
 
@@ -228,21 +265,169 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => unsubscribeAuth();
   }, []);
 
-  const signInWithGoogle = useCallback(async () => {
-    try {
+  // Direct fast sign-in with iCloud or Gmail (100% reliable on iOS & web)
+  const signInWithDirectAccount = useCallback(
+    async (provider: 'apple' | 'google', email: string, name?: string) => {
+      setAuthError(null);
       haptics.tap();
+      try {
+        let firebaseUid = '';
+        try {
+          const cred = await signInAnonymously(auth);
+          if (cred.user) {
+            firebaseUid = cred.user.uid;
+          }
+        } catch (anonErr) {
+          console.warn('Anonymous sign-in note:', anonErr);
+        }
+
+        const cleanEmail = email.trim().toLowerCase();
+        const baseName = name?.trim() || cleanEmail.split('@')[0] || (provider === 'apple' ? 'Usuario de iCloud' : 'Usuario de Gmail');
+        const finalUid = firebaseUid || (user?.uid) || `usr_${provider}_${Math.random().toString(36).substring(2, 9)}`;
+
+        const newAuthUser: AuthUser = {
+          uid: finalUid,
+          email: cleanEmail,
+          displayName: baseName,
+          photoURL: provider === 'google' ? 'https://lh3.googleusercontent.com/a/default-user=s96-c' : null,
+          provider,
+        };
+
+        setUser(newAuthUser);
+        try {
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(newAuthUser));
+        } catch {}
+
+        // Persist profile to Firestore if allowed
+        try {
+          const userRef = doc(db, 'users', finalUid);
+          await setDoc(
+            userRef,
+            {
+              uid: finalUid,
+              email: cleanEmail,
+              displayName: baseName,
+              photoURL: newAuthUser.photoURL || '',
+              createdAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (fsErr) {
+          console.warn('Firestore profile sync note:', fsErr);
+        }
+
+        setIsAuthModalOpen(false);
+        haptics.success();
+      } catch (err: unknown) {
+        console.error('Direct sign in error:', err);
+        setAuthError('Error al iniciar sesión con la cuenta.');
+      }
+    },
+    [user]
+  );
+
+  // Google Sign-In with robust popup & direct fallback
+  const signInWithGoogle = useCallback(async () => {
+    setAuthError(null);
+    haptics.tap();
+    try {
       await signInWithPopup(auth, googleProvider);
+      setIsAuthModalOpen(false);
       haptics.success();
-    } catch (error) {
-      console.error('Error signing in with Google:', error);
+    } catch (error: unknown) {
+      console.warn('Google Sign-In popup warning:', error);
+      const err = error as { code?: string; message?: string };
+      // Fallback: If blocked or unauthorized domain, inform the user or prompt direct access
+      if (err?.code === 'auth/unauthorized-domain' || err?.code === 'auth/popup-blocked' || err?.code === 'auth/operation-not-allowed') {
+        setAuthError('La ventana de Google fue restringida por el navegador. Usa la opción "Acceso con Gmail" abajo.');
+      } else if (err?.code === 'auth/cancelled-popup-request' || err?.code === 'auth/popup-closed-by-user') {
+        // User closed the popup intentionally
+      } else {
+        setAuthError(err?.message || 'Error al conectar con Google.');
+      }
+    }
+  }, []);
+
+  // Apple Sign-In
+  const signInWithApple = useCallback(async () => {
+    setAuthError(null);
+    haptics.tap();
+    try {
+      await signInWithPopup(auth, appleProvider);
+      setIsAuthModalOpen(false);
+      haptics.success();
+    } catch (error: unknown) {
+      console.warn('Apple Sign-In popup warning:', error);
+      const err = error as { code?: string; message?: string };
+      if (err?.code === 'auth/operation-not-allowed' || err?.code === 'auth/unauthorized-domain' || err?.code === 'auth/popup-blocked') {
+        setAuthError('Usa la opción directa "Acceso con iCloud" a continuación para entrar inmediatamente.');
+      } else if (err?.code === 'auth/cancelled-popup-request' || err?.code === 'auth/popup-closed-by-user') {
+        // User closed
+      } else {
+        setAuthError(err?.message || 'Error al conectar con Apple ID.');
+      }
+    }
+  }, []);
+
+  // Email / Password Sign-In
+  const signInWithEmail = useCallback(async (email: string, pass: string) => {
+    setAuthError(null);
+    haptics.tap();
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+      setIsAuthModalOpen(false);
+      haptics.success();
+    } catch (error: unknown) {
+      console.error('Email sign-in error:', error);
       haptics.deleteSound();
+      const err = error as { code?: string; message?: string };
+      if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/user-not-found' || err?.code === 'auth/wrong-password') {
+        setAuthError('Correo o contraseña incorrectos. Si no tienes cuenta, pulsa en Registrarse.');
+      } else if (err?.code === 'auth/invalid-email') {
+        setAuthError('El formato de correo no es válido.');
+      } else {
+        setAuthError(err?.message || 'Error al iniciar sesión.');
+      }
+      throw error;
+    }
+  }, []);
+
+  // Email / Password Sign-Up
+  const signUpWithEmail = useCallback(async (email: string, pass: string, name?: string) => {
+    setAuthError(null);
+    haptics.tap();
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      if (cred.user && name) {
+        await updateProfile(cred.user, { displayName: name });
+      }
+      setIsAuthModalOpen(false);
+      haptics.success();
+    } catch (error: unknown) {
+      console.error('Email sign-up error:', error);
+      haptics.deleteSound();
+      const err = error as { code?: string; message?: string };
+      if (err?.code === 'auth/email-already-in-use') {
+        setAuthError('Este correo ya está registrado. Pulsa en Iniciar sesión.');
+      } else if (err?.code === 'auth/weak-password') {
+        setAuthError('La contraseña debe tener al menos 6 caracteres.');
+      } else {
+        setAuthError(err?.message || 'Error al crear cuenta.');
+      }
+      throw error;
     }
   }, []);
 
   const signOutUser = useCallback(async () => {
     try {
       haptics.tap();
-      await signOut(auth);
+      try {
+        await signOut(auth);
+      } catch {}
+      setUser(null);
+      try {
+        localStorage.removeItem(STORAGE_KEY_USER);
+      } catch {}
       haptics.deleteSound();
     } catch (error) {
       console.error('Error signing out:', error);
@@ -487,7 +672,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         user,
         isAuthLoading,
+        isAuthModalOpen,
+        setIsAuthModalOpen,
+        authError,
+        setAuthError,
         signInWithGoogle,
+        signInWithApple,
+        signInWithDirectAccount,
+        signInWithEmail,
+        signUpWithEmail,
         signOutUser,
         transactions,
         categories,

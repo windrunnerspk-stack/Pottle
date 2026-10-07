@@ -30,6 +30,8 @@ export const WidgetsICloudView: React.FC = () => {
     addTransaction,
     categories,
     transactions,
+    user,
+    setIsAuthModalOpen,
   } = useFinance();
 
   const [widgetFeedback, setWidgetFeedback] = useState<string | null>(null);
@@ -304,25 +306,46 @@ export const WidgetsICloudView: React.FC = () => {
           </span>
         </div>
 
-        {/* Sync Trigger Action */}
+        {/* Sync Trigger Action & Account Status */}
         <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/50 mb-4 flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-stone-800">
-              Estado de la nube
+            <div className="text-xs font-semibold text-stone-800 flex items-center gap-1.5">
+              <span>{user ? (user.provider === 'apple' ? 'iCloud Vinculado' : user.provider === 'google' ? 'Google / Gmail Vinculado' : 'Cuenta Activa') : 'Sin cuenta vinculada'}</span>
+              {user && (
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full font-medium">
+                  {user.email || 'Conectado'}
+                </span>
+              )}
             </div>
             <div className="text-[11px] text-stone-500 mt-0.5">
-              {iCloudSyncStatus === 'syncing' ? 'Transmitiendo datos cifrados...' : 'Todos los movimientos sincronizados.'}
+              {user 
+                ? (iCloudSyncStatus === 'syncing' ? 'Transmitiendo datos cifrados...' : 'Todos los movimientos sincronizados.')
+                : 'Conecta tu cuenta para sincronizar con CloudKit y Google.'}
             </div>
           </div>
 
-          <button
-            onClick={triggerICloudSync}
-            disabled={iCloudSyncStatus === 'syncing'}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1F242D] text-white rounded-xl text-xs font-semibold hover:bg-stone-800 active:scale-95 transition-all cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${iCloudSyncStatus === 'syncing' ? 'animate-spin' : ''}`} />
-            <span>Sincronizar</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            {!user ? (
+              <button
+                onClick={() => {
+                  haptics.tap();
+                  setIsAuthModalOpen(true);
+                }}
+                className="px-2.5 py-1.5 bg-stone-900 text-white rounded-xl text-xs font-semibold active:scale-95 transition-all cursor-pointer shadow-xs"
+              >
+                Conectar
+              </button>
+            ) : (
+              <button
+                onClick={triggerICloudSync}
+                disabled={iCloudSyncStatus === 'syncing'}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1F242D] text-white rounded-xl text-xs font-semibold hover:bg-stone-800 active:scale-95 transition-all cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${iCloudSyncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                <span>Sincronizar</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Device Roster */}

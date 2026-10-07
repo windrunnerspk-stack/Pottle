@@ -8,7 +8,9 @@ import {
   Clock, 
   CloudCheck, 
   ArrowUpRight,
-  ArrowDownLeft
+  ArrowDownLeft,
+  LogIn,
+  User as UserIcon
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { formatCurrency, getMonthLabel, MONTH_NAMES_ES } from '../utils/formatters';
@@ -28,7 +30,7 @@ export const HomeDashboard: React.FC = () => {
     iCloudSyncStatus,
     triggerICloudSync,
     user,
-    signInWithGoogle,
+    setIsAuthModalOpen,
     setIsCategoryManagerOpen,
   } = useFinance();
 
@@ -112,10 +114,25 @@ export const HomeDashboard: React.FC = () => {
                 haptics.tap();
                 setIsSettingsOpen(true);
               }}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-2xl bg-white/70 backdrop-blur-md border border-stone-200/50 shadow-xs active:scale-95 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-2xl bg-white/70 backdrop-blur-md border border-stone-200/50 shadow-xs active:scale-95 transition-all cursor-pointer"
               title="Cuenta de usuario"
             >
-              {user.photoURL ? (
+              {user.provider === 'apple' ? (
+                <div className="w-5 h-5 rounded-full bg-black text-white flex items-center justify-center">
+                  <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 170 170">
+                    <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.04-7.69-7.85-12.01-14.43-6.53-9.87-11.75-21.28-15.66-34.23-3.92-12.94-5.88-25.07-5.88-36.38 0-16.14 4.12-29.41 12.36-39.81 8.24-10.4 18.23-15.71 29.98-15.93 5.43 0 11.09 1.41 16.99 4.23 5.9 2.82 10.01 4.34 12.33 4.56 2.21 0 6.64-1.57 13.29-4.71 6.65-3.14 12.6-4.52 17.86-4.13 13.52.87 24.32 5.92 32.4 15.15-11.78 7.17-17.56 16.94-17.34 29.32.22 9.68 3.91 17.81 11.07 24.41 7.16 6.6 15.54 10.32 25.14 11.16-2.5 7.82-5.76 15.5-9.78 23.03zm-32.99-106.9c0-8.04 2.87-15.65 8.62-22.82 5.75-7.17 12.79-11.83 21.12-13.98.54 1.74.82 3.59.82 5.54 0 7.93-2.93 15.65-8.79 23.16-5.86 7.51-12.98 12.18-21.36 14.02-.22-1.96-.41-3.94-.41-5.92z" />
+                  </svg>
+                </div>
+              ) : user.provider === 'google' ? (
+                <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center border border-stone-200">
+                  <svg className="w-2.5 h-2.5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.36 24 12 24z" />
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                  </svg>
+                </div>
+              ) : user.photoURL ? (
                 <img
                   src={user.photoURL}
                   alt={user.displayName || 'Usuario'}
@@ -126,20 +143,21 @@ export const HomeDashboard: React.FC = () => {
                   {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
                 </div>
               )}
-              <span className="text-[11px] font-medium text-stone-700 max-w-[70px] truncate hidden sm:inline">
-                {user.displayName?.split(' ')[0] || 'Cuenta'}
+              <span className="text-[11px] font-medium text-stone-700 max-w-[80px] truncate">
+                {user.displayName?.split(' ')[0] || (user.provider === 'apple' ? 'iCloud' : 'Gmail')}
               </span>
             </button>
           ) : (
             <button
               onClick={() => {
                 haptics.tap();
-                signInWithGoogle();
+                setIsAuthModalOpen(true);
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-2xl bg-stone-900 text-white shadow-xs active:scale-95 transition-all cursor-pointer text-[11px] font-semibold"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-stone-900 text-white shadow-xs active:scale-95 transition-all cursor-pointer text-xs font-semibold"
               title="Iniciar sesión"
             >
-              <span>Acceder</span>
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Iniciar sesión</span>
             </button>
           )}
 

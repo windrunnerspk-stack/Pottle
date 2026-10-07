@@ -17,6 +17,7 @@ import { CalendarDaySheet } from './components/CalendarDaySheet';
 import { SettingsModal } from './components/SettingsModal';
 import { CurrencyPickerModal } from './components/CurrencyPickerModal';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
+import { AuthModal } from './components/AuthModal';
 
 const AppContent: React.FC = () => {
   const { activeTab, setActiveTab } = useFinance();
@@ -43,6 +44,7 @@ const AppContent: React.FC = () => {
       <SettingsModal />
       <CurrencyPickerModal />
       <CategoryManagerModal />
+      <AuthModal />
     </div>
   );
 };

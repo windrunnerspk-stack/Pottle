@@ -32,6 +32,14 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export interface AuthUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  provider: 'apple' | 'google' | 'email';
+}
+
 export type Currency = 'EUR' | 'USD' | 'MXN' | 'COP';
 
 export interface CurrencyConfig {
