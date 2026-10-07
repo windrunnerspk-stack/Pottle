@@ -33,6 +33,9 @@ export const SettingsModal: React.FC = () => {
     isAuthLoading,
     signInWithGoogle,
     signOutUser,
+    setIsCurrencyPickerOpen,
+    setIsCategoryManagerOpen,
+    loadDemoData,
   } = useFinance();
 
   const [showIosGuide, setShowIosGuide] = useState(false);
@@ -216,6 +219,27 @@ export const SettingsModal: React.FC = () => {
           </div>
         </div>
 
+        {/* Category Manager Trigger */}
+        <div className="mb-4">
+          <label className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider block mb-1.5 px-1">
+            Categorías & Iconos
+          </label>
+          <button
+            onClick={() => {
+              haptics.tap();
+              setIsCategoryManagerOpen(true);
+              handleClose();
+            }}
+            className="w-full p-3 bg-stone-50 hover:bg-stone-100 border border-stone-200/70 rounded-2xl flex items-center justify-between text-xs font-semibold text-stone-800 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">🍿</span>
+              <span>Añadir / Personalizar Categorías</span>
+            </div>
+            <span className="text-[10px] text-stone-400">Gestionar &gt;</span>
+          </button>
+        </div>
+
         {/* Exportar a iOS Nativo (Release con Capacitor) Guide Drawer */}
         <div className="mb-4">
           <label className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider block mb-1.5 px-1">
@@ -279,19 +303,30 @@ export const SettingsModal: React.FC = () => {
           )}
         </div>
 
-        {/* Reset Initial Data */}
-        <div className="pt-2 border-t border-stone-100">
+        {/* Reset & Demo Data Buttons */}
+        <div className="pt-2 border-t border-stone-100 space-y-2">
           <button
             onClick={() => {
-              if (window.confirm('¿Restablecer los datos demo de Octubre 2026?')) {
+              if (window.confirm('¿Vaciar todos los movimientos para empezar desde cero?')) {
                 resetData();
                 handleClose();
               }
             }}
-            className="w-full py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            className="w-full py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Restablecer datos demo</span>
+            <span>Vaciar datos (Empezar en blanco)</span>
+          </button>
+
+          <button
+            onClick={() => {
+              loadDemoData();
+              handleClose();
+            }}
+            className="w-full py-2 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Sparkles className="w-3 h-3 text-amber-600" />
+            <span>Cargar movimientos demo de ejemplo</span>
           </button>
         </div>
       </div>

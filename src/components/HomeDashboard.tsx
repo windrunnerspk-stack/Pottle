@@ -29,6 +29,7 @@ export const HomeDashboard: React.FC = () => {
     triggerICloudSync,
     user,
     signInWithGoogle,
+    setIsCategoryManagerOpen,
   } = useFinance();
 
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
@@ -246,11 +247,20 @@ export const HomeDashboard: React.FC = () => {
             <span>Registro Rápido</span>
             <span className="text-[11px] font-normal text-stone-400">· Toca para añadir</span>
           </h2>
+          <button
+            onClick={() => {
+              haptics.tap();
+              setIsCategoryManagerOpen(true);
+            }}
+            className="text-[11px] font-semibold text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200/80 px-2.5 py-1 rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
+          >
+            <span>⚙️ Personalizar</span>
+          </button>
         </div>
 
         {/* Grid of categories with pastel squircle design */}
         <div className="grid grid-cols-4 gap-2.5">
-          {categories.slice(0, 8).map((cat) => (
+          {categories.slice(0, 7).map((cat) => (
             <button
               key={cat.id}
               onClick={() => openCategoryQuickAdd(cat)}
@@ -274,6 +284,22 @@ export const HomeDashboard: React.FC = () => {
               </span>
             </button>
           ))}
+
+          {/* Plus Add / Customize Tile */}
+          <button
+            onClick={() => {
+              haptics.tap();
+              setIsCategoryManagerOpen(true);
+            }}
+            className="h-24 rounded-[22px] border border-dashed border-stone-300 bg-stone-50/60 hover:bg-stone-100/80 p-2 flex flex-col items-center justify-between text-center transition-all duration-150 active:scale-95 shadow-xs cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-2xl bg-white/80 border border-stone-200 flex items-center justify-center text-lg text-stone-500 shadow-xs group-hover:scale-110 transition-transform">
+              ➕
+            </div>
+            <span className="text-[11px] font-semibold tracking-tight text-stone-500 truncate w-full">
+              Más
+            </span>
+          </button>
         </div>
       </section>
 
@@ -330,8 +356,16 @@ export const HomeDashboard: React.FC = () => {
 
         {/* Transactions list */}
         {displayedTransactions.length === 0 ? (
-          <div className="py-8 text-center text-stone-400 text-xs">
-            No hay movimientos en este periodo. Toca cualquier categoría arriba para registrar uno.
+          <div className="py-10 text-center px-4">
+            <div className="w-11 h-11 rounded-2xl bg-stone-100 flex items-center justify-center text-xl mx-auto mb-2 text-stone-400">
+              🌱
+            </div>
+            <div className="text-xs font-semibold text-stone-800 mb-0.5">
+              Sin movimientos registrados en este mes
+            </div>
+            <p className="text-[11px] text-stone-400 max-w-[260px] mx-auto leading-relaxed">
+              Toca cualquier categoría arriba para ingresar tu primer gasto o ingreso en {currency}.
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-stone-100">

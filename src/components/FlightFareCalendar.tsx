@@ -59,7 +59,7 @@ export const FlightFareCalendar: React.FC = () => {
     }
   });
 
-  const dailyAvg = statsSummary.dailyAverageExpense || 30;
+  const dailyAvg = statsSummary.dailyAverageExpense || (currency === 'COP' ? 35000 : 30);
 
   // Find max expense day for stats badge
   let maxExpenseDay: string | null = null;

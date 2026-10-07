@@ -15,6 +15,8 @@ import { WidgetsICloudView } from './components/WidgetsICloudView';
 import { QuickEntryModal } from './components/QuickEntryModal';
 import { CalendarDaySheet } from './components/CalendarDaySheet';
 import { SettingsModal } from './components/SettingsModal';
+import { CurrencyPickerModal } from './components/CurrencyPickerModal';
+import { CategoryManagerModal } from './components/CategoryManagerModal';
 
 const AppContent: React.FC = () => {
   const { activeTab, setActiveTab } = useFinance();
@@ -39,6 +41,8 @@ const AppContent: React.FC = () => {
       <QuickEntryModal />
       <CalendarDaySheet />
       <SettingsModal />
+      <CurrencyPickerModal />
+      <CategoryManagerModal />
     </div>
   );
 };

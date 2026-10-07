@@ -16,7 +16,7 @@ import {
   Check
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getWidgetPresets } from '../utils/formatters';
 import { haptics } from '../utils/haptics';
 
 export const WidgetsICloudView: React.FC = () => {
@@ -158,52 +158,57 @@ export const WidgetsICloudView: React.FC = () => {
             <span className="text-[10px] text-stone-400 font-medium">Widget Mediano</span>
           </div>
 
-          {/* 4 Quick Instant 1-Tap Buttons */}
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <button
-              onClick={() => handleInstantQuickTap(3.80, 'salidas', 'Café & Snack')}
-              className="p-2.5 rounded-2xl bg-[#FCE7ED] border border-[#F9CCD8] flex items-center gap-2 text-left active:scale-95 transition-all cursor-pointer group"
-            >
-              <span className="text-xl group-hover:scale-110 transition-transform">☕️</span>
-              <div>
-                <span className="text-xs font-bold text-[#962F4C] block">Café</span>
-                <span className="text-[10px] text-[#962F4C]/80 font-medium">{formatCurrency(3.80, currency)}</span>
-              </div>
-            </button>
+          {/* 4 Quick Instant 1-Tap Buttons (Dynamic amounts per currency) */}
+          {(() => {
+            const wAmounts = getWidgetPresets(currency);
+            return (
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  onClick={() => handleInstantQuickTap(wAmounts.coffee, 'salidas', 'Café & Snack')}
+                  className="p-2.5 rounded-2xl bg-[#FCE7ED] border border-[#F9CCD8] flex items-center gap-2 text-left active:scale-95 transition-all cursor-pointer group"
+                >
+                  <span className="text-xl group-hover:scale-110 transition-transform">☕️</span>
+                  <div>
+                    <span className="text-xs font-bold text-[#962F4C] block">Café</span>
+                    <span className="text-[10px] text-[#962F4C]/80 font-medium tabular-nums">{formatCurrency(wAmounts.coffee, currency)}</span>
+                  </div>
+                </button>
 
-            <button
-              onClick={() => handleInstantQuickTap(35.00, 'supermercado', 'Compra Súper')}
-              className="p-2.5 rounded-2xl bg-[#E4F5E8] border border-[#C6ECCF] flex items-center gap-2 text-left active:scale-95 transition-all cursor-pointer group"
-            >
-              <span className="text-xl group-hover:scale-110 transition-transform">🛒</span>
-              <div>
-                <span className="text-xs font-bold text-[#1E6B39] block">Súper</span>
-                <span className="text-[10px] text-[#1E6B39]/80 font-medium">{formatCurrency(35.00, currency)}</span>
-              </div>
-            </button>
+                <button
+                  onClick={() => handleInstantQuickTap(wAmounts.groceries, 'supermercado', 'Compra Súper')}
+                  className="p-2.5 rounded-2xl bg-[#E4F5E8] border border-[#C6ECCF] flex items-center gap-2 text-left active:scale-95 transition-all cursor-pointer group"
+                >
+                  <span className="text-xl group-hover:scale-110 transition-transform">🛒</span>
+                  <div>
+                    <span className="text-xs font-bold text-[#1E6B39] block">Súper</span>
+                    <span className="text-[10px] text-[#1E6B39]/80 font-medium tabular-nums">{formatCurrency(wAmounts.groceries, currency)}</span>
+                  </div>
+                </button>
 
-            <button
-              onClick={() => handleInstantQuickTap(40.00, 'gasolina', 'Gasolina')}
-              className="p-2.5 rounded-2xl bg-[#FEF8DE] border border-[#FBEFB2] flex items-center gap-2 text-left active:scale-95 transition-all cursor-pointer group"
-            >
-              <span className="text-xl group-hover:scale-110 transition-transform">⛽️</span>
-              <div>
-                <span className="text-xs font-bold text-[#826915] block">Gasolina</span>
-                <span className="text-[10px] text-[#826915]/80 font-medium">{formatCurrency(40.00, currency)}</span>
-              </div>
-            </button>
+                <button
+                  onClick={() => handleInstantQuickTap(wAmounts.gas, 'gasolina', 'Gasolina')}
+                  className="p-2.5 rounded-2xl bg-[#FEF8DE] border border-[#FBEFB2] flex items-center gap-2 text-left active:scale-95 transition-all cursor-pointer group"
+                >
+                  <span className="text-xl group-hover:scale-110 transition-transform">⛽️</span>
+                  <div>
+                    <span className="text-xs font-bold text-[#826915] block">Gasolina</span>
+                    <span className="text-[10px] text-[#826915]/80 font-medium tabular-nums">{formatCurrency(wAmounts.gas, currency)}</span>
+                  </div>
+                </button>
 
-            <button
-              onClick={() => handleInstantQuickTap(18.50, 'mascotas', 'Mascotas')}
-              className="p-2.5 rounded-2xl bg-[#E8F6EF] border border-[#CCEEDB] flex items-center gap-2 text-left active:scale-95 transition-all cursor-pointer group"
-            >
-              <span className="text-xl group-hover:scale-110 transition-transform">🐾</span>
-              <div>
-                <span className="text-xs font-bold text-[#297246] block">Mascotas</span>
-                <span className="text-[10px] text-[#297246]/80 font-medium">{formatCurrency(18.50, currency)}</span>
+                <button
+                  onClick={() => handleInstantQuickTap(wAmounts.pets, 'mascotas', 'Mascotas')}
+                  className="p-2.5 rounded-2xl bg-[#E8F6EF] border border-[#CCEEDB] flex items-center gap-2 text-left active:scale-95 transition-all cursor-pointer group"
+                >
+                  <span className="text-xl group-hover:scale-110 transition-transform">🐾</span>
+                  <div>
+                    <span className="text-xs font-bold text-[#297246] block">Mascotas</span>
+                    <span className="text-[10px] text-[#297246]/80 font-medium tabular-nums">{formatCurrency(wAmounts.pets, currency)}</span>
+                  </div>
+                </button>
               </div>
-            </button>
-          </div>
+            );
+          })()}
 
           {/* Voice / Quick Text Natural Dictation Bar */}
           <form onSubmit={handleVoiceSubmit} className="flex items-center gap-1.5 p-1.5 bg-stone-50 rounded-2xl border border-stone-200/60">

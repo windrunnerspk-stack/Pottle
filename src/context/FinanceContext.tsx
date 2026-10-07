@@ -10,11 +10,10 @@ import {
   doc, 
   setDoc, 
   deleteDoc, 
-  onSnapshot, 
-  serverTimestamp 
+  onSnapshot 
 } from 'firebase/firestore';
-import { Transaction, Category, Currency, ICloudDevice, UserProfile } from '../types/finance';
-import { INITIAL_CATEGORIES, INITIAL_TRANSACTIONS, INITIAL_ICLOUD_DEVICES } from '../data/initialData';
+import { Transaction, Category, Currency, ICloudDevice } from '../types/finance';
+import { INITIAL_CATEGORIES, INITIAL_TRANSACTIONS, DEMO_TRANSACTIONS, INITIAL_ICLOUD_DEVICES } from '../data/initialData';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
 import { haptics } from '../utils/haptics';
 
@@ -36,10 +35,18 @@ interface FinanceContextType {
   signOutUser: () => Promise<void>;
   transactions: Transaction[];
   categories: Category[];
+  addCategory: (cat: Omit<Category, 'id'>) => void;
+  updateCategory: (id: string, updates: Partial<Category>) => void;
+  deleteCategory: (id: string) => void;
+  isCategoryManagerOpen: boolean;
+  setIsCategoryManagerOpen: (open: boolean) => void;
   selectedMonth: string; // 'YYYY-MM'
   setSelectedMonth: (month: string) => void;
   currency: Currency;
   setCurrency: (c: Currency) => void;
+  isCurrencyPickerOpen: boolean;
+  setIsCurrencyPickerOpen: (open: boolean) => void;
+  confirmCurrency: (c: Currency) => void;
   activeTab: 'home' | 'calendar' | 'stats' | 'widgets';
   setActiveTab: (tab: 'home' | 'calendar' | 'stats' | 'widgets') => void;
   selectedDay: string | null;
@@ -57,6 +64,7 @@ interface FinanceContextType {
   deleteTransaction: (id: string) => Promise<void>;
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
   resetData: () => void;
+  loadDemoData: () => void;
   isSoundEnabled: boolean;
   toggleSound: () => void;
   statsSummary: StatsSummary;
@@ -66,27 +74,46 @@ interface FinanceContextType {
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
-const STORAGE_KEY_TX = 'potle_finance_transactions_v3';
-const STORAGE_KEY_CURRENCY = 'potle_finance_currency_v3';
-const STORAGE_KEY_SOUND = 'potle_finance_sound_v3';
+const STORAGE_KEY_TX = 'potle_finance_transactions_v4';
+const STORAGE_KEY_CURRENCY = 'potle_finance_currency_v4';
+const STORAGE_KEY_CURRENCY_CONFIRMED = 'potle_finance_currency_confirmed_v4';
+const STORAGE_KEY_CATEGORIES = 'potle_finance_categories_v4';
+const STORAGE_KEY_SOUND = 'potle_finance_sound_v4';
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
+  // Default empty transactions for a real personal finance tracker
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_TX);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
     return INITIAL_TRANSACTIONS;
   });
 
-  const [categories] = useState<Category[]>(INITIAL_CATEGORIES);
+  // Dynamic user editable categories
+  const [categories, setCategories] = useState<Category[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CATEGORIES);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_CATEGORIES;
+  });
+
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+
+  // Default to current prototype month
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-10');
+
+  // Default Currency is COP (Pesos colombianos)
   const [currency, setCurrencyState] = useState<Currency>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_CURRENCY);
@@ -94,7 +121,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return saved as Currency;
       }
     } catch {}
-    return 'EUR';
+    return 'COP';
+  });
+
+  // Welcome currency picker modal for first-time onboarding
+  const [isCurrencyPickerOpen, setIsCurrencyPickerOpen] = useState<boolean>(() => {
+    try {
+      const confirmed = localStorage.getItem(STORAGE_KEY_CURRENCY_CONFIRMED);
+      return confirmed !== 'true';
+    } catch {
+      return true;
+    }
   });
 
   const [activeTab, setActiveTabState] = useState<'home' | 'calendar' | 'stats' | 'widgets'>('home');
@@ -119,6 +156,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       localStorage.setItem(STORAGE_KEY_SOUND, String(isSoundEnabled));
     } catch {}
   }, [isSoundEnabled]);
+
+  // Save categories to local storage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
+    } catch {}
+  }, [categories]);
 
   // Auth state listener & Real-time Firestore sync
   useEffect(() => {
@@ -151,27 +195,24 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const unsubscribeTx = onSnapshot(
           txCol,
           (snapshot) => {
-            if (!snapshot.empty) {
-              const remoteTxs: Transaction[] = [];
-              snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                remoteTxs.push({
-                  id: docSnap.id,
-                  userId: data.userId || currentUser.uid,
-                  type: data.type || 'expense',
-                  amount: Number(data.amount) || 0,
-                  categoryId: data.categoryId || 'salidas',
-                  note: data.note || '',
-                  date: data.date || '2026-10-06',
-                  time: data.time || '12:00',
-                  createdAt: data.createdAt,
-                  syncedToICloud: true,
-                });
+            const remoteTxs: Transaction[] = [];
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data();
+              remoteTxs.push({
+                id: docSnap.id,
+                userId: data.userId || currentUser.uid,
+                type: data.type || 'expense',
+                amount: Number(data.amount) || 0,
+                categoryId: data.categoryId || 'salidas',
+                note: data.note || '',
+                date: data.date || '2026-10-06',
+                time: data.time || '12:00',
+                createdAt: data.createdAt,
+                syncedToICloud: true,
               });
-              // Sort descending by date & time
-              remoteTxs.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
-              setTransactions(remoteTxs);
-            }
+            });
+            remoteTxs.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+            setTransactions(remoteTxs);
           },
           (error) => {
             handleFirestoreError(error, OperationType.LIST, txPath);
@@ -221,6 +262,34 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     haptics.tap();
   }, []);
 
+  const confirmCurrency = useCallback((c: Currency) => {
+    setCurrencyState(c);
+    try {
+      localStorage.setItem(STORAGE_KEY_CURRENCY, c);
+      localStorage.setItem(STORAGE_KEY_CURRENCY_CONFIRMED, 'true');
+    } catch {}
+    setIsCurrencyPickerOpen(false);
+    haptics.success();
+  }, []);
+
+  // Category management
+  const addCategory = useCallback((cat: Omit<Category, 'id'>) => {
+    const id = `cat-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    const newCategory: Category = { ...cat, id };
+    setCategories((prev) => [newCategory, ...prev]);
+    haptics.success();
+  }, []);
+
+  const updateCategory = useCallback((id: string, updates: Partial<Category>) => {
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+    haptics.tap();
+  }, []);
+
+  const deleteCategory = useCallback((id: string) => {
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+    haptics.deleteSound();
+  }, []);
+
   const setActiveTab = useCallback((tab: 'home' | 'calendar' | 'stats' | 'widgets') => {
     haptics.tap();
     setActiveTabState(tab);
@@ -264,11 +333,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         syncedToICloud: true,
       };
 
-      // Optimistic local update
       setTransactions((prev) => [newTx, ...prev]);
       haptics.success();
 
-      // Write to Firestore if user is authenticated
       if (user) {
         const path = `users/${user.uid}/transactions/${newId}`;
         try {
@@ -326,9 +393,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 
   const resetData = useCallback(() => {
-    setTransactions(INITIAL_TRANSACTIONS);
+    setTransactions([]);
     setSelectedMonth('2026-10');
     haptics.deleteSound();
+  }, []);
+
+  const loadDemoData = useCallback(() => {
+    setTransactions(DEMO_TRANSACTIONS);
+    setSelectedMonth('2026-10');
+    haptics.success();
   }, []);
 
   const openCategoryQuickAdd = useCallback((category: Category) => {
@@ -418,10 +491,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         signOutUser,
         transactions,
         categories,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        isCategoryManagerOpen,
+        setIsCategoryManagerOpen,
         selectedMonth,
         setSelectedMonth,
         currency,
         setCurrency,
+        isCurrencyPickerOpen,
+        setIsCurrencyPickerOpen,
+        confirmCurrency,
         activeTab,
         setActiveTab,
         selectedDay,
@@ -439,6 +520,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteTransaction,
         updateTransaction,
         resetData,
+        loadDemoData,
         isSoundEnabled,
         toggleSound,
         statsSummary,

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Check, Calendar, MessageSquare, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Category, TransactionType } from '../types/finance';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencyPresets } from '../utils/formatters';
 import { haptics } from '../utils/haptics';
 
 export const QuickEntryModal: React.FC = () => {
@@ -217,15 +217,15 @@ export const QuickEntryModal: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Amount Presets ($5, $15, $30, $50) */}
+        {/* Quick Amount Presets (Dynamic by Currency) */}
         <div className="grid grid-cols-4 gap-1.5 mb-3">
-          {[5, 15, 30, 50].map((preset) => (
+          {getCurrencyPresets(currency).map((preset) => (
             <button
               key={preset}
               onClick={() => handleQuickPreset(preset)}
-              className="py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+              className="py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-[11px] font-semibold active:scale-95 transition-all cursor-pointer tabular-nums truncate px-1"
             >
-              +{preset}
+              +{preset >= 1000 ? `${(preset / 1000).toLocaleString()}k` : preset}
             </button>
           ))}
         </div>
@@ -244,11 +244,11 @@ export const QuickEntryModal: React.FC = () => {
 
         {/* Numeric Keypad Grid */}
         <div className="grid grid-cols-3 gap-1.5 mb-4">
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'DEL'].map((key) => (
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9', currency === 'COP' ? '000' : '.', '0', 'DEL'].map((key) => (
             <button
               key={key}
               onClick={() => handleKeypadPress(key)}
-              className="h-10 rounded-xl bg-stone-100 hover:bg-stone-200/80 active:bg-stone-300 text-stone-800 font-semibold text-sm flex items-center justify-center transition-all cursor-pointer"
+              className="h-10 rounded-xl bg-stone-100 hover:bg-stone-200/80 active:bg-stone-300 text-stone-800 font-semibold text-sm flex items-center justify-center transition-all cursor-pointer tabular-nums"
             >
               {key === 'DEL' ? '⌫' : key}
             </button>
