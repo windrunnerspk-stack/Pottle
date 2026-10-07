@@ -1,0 +1,6 @@
+{
+  "name": "Sparkle · Finanzas Minimalistas",
+  "description": "Aplicación de finanzas personales para iPhone estilo Parker y Sparkle con vista de calendario tarifario, widgets interactivos y sincronización iCloud.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

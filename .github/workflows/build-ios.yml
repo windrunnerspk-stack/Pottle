@@ -1,0 +1,69 @@
+name: Build iOS Release (Potle Finanzas)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # Permite ejecutar el flujo manualmente desde la pestaña Actions en GitHub
+
+jobs:
+  build-ios:
+    name: Build iOS App (.xcarchive / Release)
+    runs-on: macos-latest # Utiliza los runners Mac de GitHub con Xcode preinstalado
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Seleccionar versión de Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Instalar dependencias npm
+        run: npm install
+
+      - name: Compilar proyecto Vite (Web Release)
+        run: npm run build
+
+      - name: Preparar y sincronizar proyecto nativo Capacitor iOS
+        run: |
+          # Si la carpeta ios/ no existe aún en el repo, la añade
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+          npx cap sync ios
+
+      - name: Instalar CocoaPods
+        run: |
+          cd ios/App
+          pod install --repo-update
+          cd ../..
+
+      - name: Compilar en modo Release con xcodebuild
+        run: |
+          cd ios/App
+          xcodebuild archive \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath ./build/PotleFinanzas.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER=""
+
+      - name: Subir artefacto compilado (.xcarchive)
+        uses: actions/upload-artifact@v4
+        with:
+          name: potle-finanzas-ios-release-archive
+          path: ios/App/build/PotleFinanzas.xcarchive
+          retention-days: 14

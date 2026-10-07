@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique identifier of the user",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Full name or alias of the user",
+          "maxLength": 128
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Profile picture URL",
+          "maxLength": 512
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp when the user profile was created",
+          "maxLength": 64
+        }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial expense or income transaction entry",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the owner who created this transaction",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "description": "Transaction type",
+          "enum": ["expense", "income"]
+        },
+        "amount": {
+          "type": "number",
+          "description": "Numerical monetary amount"
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "Category identifier",
+          "maxLength": 64
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional note or concept description",
+          "maxLength": 200
+        },
+        "date": {
+          "type": "string",
+          "description": "Transaction date YYYY-MM-DD",
+          "maxLength": 10
+        },
+        "time": {
+          "type": "string",
+          "description": "Transaction time HH:mm",
+          "maxLength": 8
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation",
+          "maxLength": 64
+        }
+      },
+      "required": ["userId", "type", "amount", "categoryId", "date", "time"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Private user profile document"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "User's financial transactions subcollection"
+    }
+  }
+}
