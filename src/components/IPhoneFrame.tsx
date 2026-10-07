@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Smartphone, Maximize2, Sparkles } from 'lucide-react';
 import { haptics } from '../utils/haptics';
 
@@ -8,15 +8,39 @@ interface IPhoneFrameProps {
 
 export const IPhoneFrame: React.FC<IPhoneFrameProps> = ({ children }) => {
   const [deviceMode, setDeviceMode] = useState<'iphone' | 'fullscreen'>('iphone');
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    // Detect if running as standalone PWA on iOS / Android
+    const standaloneMode =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    
+    if (standaloneMode) {
+      setIsStandalone(true);
+      setDeviceMode('fullscreen');
+    }
+  }, []);
 
   const toggleMode = () => {
     haptics.tap();
     setDeviceMode((prev) => (prev === 'iphone' ? 'fullscreen' : 'iphone'));
   };
 
+  // If in native standalone mode, render edge-to-edge pure iOS view
+  if (isStandalone) {
+    return (
+      <div className="w-full min-h-screen bg-[#F8F6F0] flex flex-col overflow-hidden">
+        <div className="relative flex-1 flex flex-col w-full h-full overflow-hidden bg-[#F8F6F0]">
+          {children}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#EDE9E0] flex flex-col items-center justify-start md:justify-center p-0 md:p-6 transition-colors duration-300">
-      {/* Top Device Switcher Toolbar */}
+      {/* Top Device Switcher Toolbar (Hidden on phones) */}
       <header className="hidden md:flex items-center justify-between w-full max-w-[460px] mb-3 px-3 py-1.5 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-xs text-xs text-slate-700">
         <div className="flex items-center gap-1.5 font-medium">
           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
@@ -65,7 +89,6 @@ export const IPhoneFrame: React.FC<IPhoneFrameProps> = ({ children }) => {
         {/* Subtle Titanium Edge highlights on desktop */}
         {deviceMode === 'iphone' && (
           <>
-            {/* Side volume / power notch hints */}
             <div className="hidden md:block absolute -left-[15px] top-[140px] w-[3px] h-[34px] bg-[#615C55] rounded-l-md" />
             <div className="hidden md:block absolute -left-[15px] top-[195px] w-[3px] h-[52px] bg-[#615C55] rounded-l-md" />
             <div className="hidden md:block absolute -left-[15px] top-[260px] w-[3px] h-[52px] bg-[#615C55] rounded-l-md" />

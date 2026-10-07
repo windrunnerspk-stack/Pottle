@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FAF8F2"/>
+      <stop offset="100%" stop-color="#E8F5EB"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#1E232A" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <!-- Background squircle -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)"/>
+  <!-- Inner floating card -->
+  <rect x="64" y="64" width="384" height="384" rx="96" fill="#FFFFFF" filter="url(#shadow)"/>
+  <!-- Letter P -->
+  <path d="M 180 130 L 290 130 C 350 130 380 170 380 230 C 380 290 350 330 290 330 L 244 330 L 244 382 L 180 382 Z M 244 186 L 244 274 L 284 274 C 314 274 326 256 326 230 C 326 204 314 186 284 186 Z" fill="#1E232A"/>
+  <!-- Sparkle star -->
+  <path d="M 370 120 Q 370 150 400 150 Q 370 150 370 180 Q 370 150 340 150 Q 370 150 370 120 Z" fill="#D97706"/>
+</svg>
