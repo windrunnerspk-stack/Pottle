@@ -39,18 +39,27 @@ jobs:
           fi
           npx cap sync ios
 
-      - name: Instalar CocoaPods
+      - name: Instalar CocoaPods (si aplica)
         run: |
-          cd ios/App
-          pod install --repo-update || pod install
-          cd ../..
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App
+            pod install
+            cd ../..
+          else
+            echo "No se requiere CocoaPods (Capacitor usa Swift Package Manager o gestión directa)."
+          fi
 
       - name: Compilar en modo Release con xcodebuild
         run: |
           cd ios/App
           mkdir -p ./build
+          if [ -d "App.xcworkspace" ]; then
+            BUILD_TARGET="-workspace App.xcworkspace"
+          else
+            BUILD_TARGET="-project App.xcodeproj"
+          fi
           xcodebuild archive \
-            -workspace App.xcworkspace \
+            $BUILD_TARGET \
             -scheme App \
             -configuration Release \
             -destination "generic/platform=iOS" \
