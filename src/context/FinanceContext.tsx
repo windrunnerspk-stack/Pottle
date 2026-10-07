@@ -41,7 +41,6 @@ interface FinanceContextType {
   setAuthError: (err: string | null) => void;
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
-  signInWithDirectAccount: (provider: 'apple' | 'google', email: string, name?: string) => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name?: string) => Promise<void>;
   signOutUser: () => Promise<void>;
@@ -259,74 +258,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return () => {
           unsubscribeTx();
         };
+      } else {
+        setUser(null);
+        try {
+          localStorage.removeItem(STORAGE_KEY_USER);
+        } catch {}
       }
     });
 
     return () => unsubscribeAuth();
   }, []);
 
-  // Direct fast sign-in with iCloud or Gmail (100% reliable on iOS & web)
-  const signInWithDirectAccount = useCallback(
-    async (provider: 'apple' | 'google', email: string, name?: string) => {
-      setAuthError(null);
-      haptics.tap();
-      try {
-        let firebaseUid = '';
-        try {
-          const cred = await signInAnonymously(auth);
-          if (cred.user) {
-            firebaseUid = cred.user.uid;
-          }
-        } catch (anonErr) {
-          console.warn('Anonymous sign-in note:', anonErr);
-        }
-
-        const cleanEmail = email.trim().toLowerCase();
-        const baseName = name?.trim() || cleanEmail.split('@')[0] || (provider === 'apple' ? 'Usuario de iCloud' : 'Usuario de Gmail');
-        const finalUid = firebaseUid || (user?.uid) || `usr_${provider}_${Math.random().toString(36).substring(2, 9)}`;
-
-        const newAuthUser: AuthUser = {
-          uid: finalUid,
-          email: cleanEmail,
-          displayName: baseName,
-          photoURL: provider === 'google' ? 'https://lh3.googleusercontent.com/a/default-user=s96-c' : null,
-          provider,
-        };
-
-        setUser(newAuthUser);
-        try {
-          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(newAuthUser));
-        } catch {}
-
-        // Persist profile to Firestore if allowed
-        try {
-          const userRef = doc(db, 'users', finalUid);
-          await setDoc(
-            userRef,
-            {
-              uid: finalUid,
-              email: cleanEmail,
-              displayName: baseName,
-              photoURL: newAuthUser.photoURL || '',
-              createdAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
-        } catch (fsErr) {
-          console.warn('Firestore profile sync note:', fsErr);
-        }
-
-        setIsAuthModalOpen(false);
-        haptics.success();
-      } catch (err: unknown) {
-        console.error('Direct sign in error:', err);
-        setAuthError('Error al iniciar sesión con la cuenta.');
-      }
-    },
-    [user]
-  );
-
-  // Google Sign-In with robust popup & direct fallback
+  // Google Sign-In with official Firebase Provider
   const signInWithGoogle = useCallback(async () => {
     setAuthError(null);
     haptics.tap();
@@ -335,13 +278,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsAuthModalOpen(false);
       haptics.success();
     } catch (error: unknown) {
-      console.warn('Google Sign-In popup warning:', error);
+      console.warn('Google Sign-In error:', error);
       const err = error as { code?: string; message?: string };
-      // Fallback: If blocked or unauthorized domain, inform the user or prompt direct access
-      if (err?.code === 'auth/unauthorized-domain' || err?.code === 'auth/popup-blocked' || err?.code === 'auth/operation-not-allowed') {
-        setAuthError('La ventana de Google fue restringida por el navegador. Usa la opción "Acceso con Gmail" abajo.');
+      if (err?.code === 'auth/unauthorized-domain') {
+        setAuthError(
+          'Dominio no autorizado en Firebase Console. Debes añadir "pottle-three.vercel.app" en Firebase Console > Authentication > Settings > Authorized Domains.'
+        );
+      } else if (err?.code === 'auth/popup-blocked') {
+        setAuthError('La ventana emergente fue bloqueada por el navegador. Permite las ventanas emergentes o usa tu correo para acceder.');
       } else if (err?.code === 'auth/cancelled-popup-request' || err?.code === 'auth/popup-closed-by-user') {
-        // User closed the popup intentionally
+        // User closed
       } else {
         setAuthError(err?.message || 'Error al conectar con Google.');
       }
@@ -357,14 +303,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsAuthModalOpen(false);
       haptics.success();
     } catch (error: unknown) {
-      console.warn('Apple Sign-In popup warning:', error);
+      console.warn('Apple Sign-In warning:', error);
       const err = error as { code?: string; message?: string };
-      if (err?.code === 'auth/operation-not-allowed' || err?.code === 'auth/unauthorized-domain' || err?.code === 'auth/popup-blocked') {
-        setAuthError('Usa la opción directa "Acceso con iCloud" a continuación para entrar inmediatamente.');
+      if (
+        err?.code === 'auth/operation-not-allowed' || 
+        err?.message?.includes('requested action is invalid') || 
+        err?.code === 'auth/invalid-action-code' ||
+        err?.code === 'auth/configuration-not-found'
+      ) {
+        setAuthError(
+          'El proveedor de Apple ID no está habilitado en Firebase Console (requiere certificado de Apple Developer). Para guardar tus finanzas en la nube, ingresa con Google (Gmail) o regístrate con tu correo (puedes usar tu correo @icloud.com).'
+        );
       } else if (err?.code === 'auth/cancelled-popup-request' || err?.code === 'auth/popup-closed-by-user') {
         // User closed
       } else {
-        setAuthError(err?.message || 'Error al conectar con Apple ID.');
+        setAuthError(err?.message || 'Error al conectar con Apple ID. Usa Google o la opción de Correo para guardar en la nube.');
       }
     }
   }, []);
@@ -678,7 +631,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setAuthError,
         signInWithGoogle,
         signInWithApple,
-        signInWithDirectAccount,
         signInWithEmail,
         signUpWithEmail,
         signOutUser,

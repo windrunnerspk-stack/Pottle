@@ -31,8 +31,6 @@ export const SettingsModal: React.FC = () => {
     resetData,
     user,
     isAuthLoading,
-    signInWithGoogle,
-    signInWithApple,
     signOutUser,
     setIsAuthModalOpen,
     setIsCurrencyPickerOpen,
