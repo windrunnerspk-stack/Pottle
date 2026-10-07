@@ -69,6 +69,25 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER=""
 
+      - name: Empaquetar y generar archivo instalador .ipa (Release)
+        run: |
+          cd ios/App/build
+          mkdir -p Payload
+          # Copiar la app compilada en la carpeta Payload estándar de iOS
+          cp -r PotleFinanzas.xcarchive/Products/Applications/*.app Payload/
+          # Empaquetar como archivo .ipa
+          zip -qr PotleFinanzas.ipa Payload
+          echo "Archivo .ipa generado con éxito:"
+          ls -lh PotleFinanzas.ipa
+          cd ../../..
+
+      - name: Subir archivo instalador iOS (.ipa)
+        uses: actions/upload-artifact@v4
+        with:
+          name: potle-finanzas-ios-ipa
+          path: ios/App/build/PotleFinanzas.ipa
+          retention-days: 14
+
       - name: Subir artefacto compilado (.xcarchive)
         uses: actions/upload-artifact@v4
         with:
