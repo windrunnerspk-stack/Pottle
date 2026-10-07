@@ -19,7 +19,7 @@ jobs:
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Seleccionar versión de Xcode
         run: |
@@ -34,7 +34,6 @@ jobs:
 
       - name: Preparar y sincronizar proyecto nativo Capacitor iOS
         run: |
-          # Si la carpeta ios/ no existe aún en el repo, la añade
           if [ ! -d "ios" ]; then
             npx cap add ios
           fi
@@ -43,12 +42,13 @@ jobs:
       - name: Instalar CocoaPods
         run: |
           cd ios/App
-          pod install --repo-update
+          pod install --repo-update || pod install
           cd ../..
 
       - name: Compilar en modo Release con xcodebuild
         run: |
           cd ios/App
+          mkdir -p ./build
           xcodebuild archive \
             -workspace App.xcworkspace \
             -scheme App \
