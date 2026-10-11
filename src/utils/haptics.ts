@@ -128,6 +128,16 @@ class HapticAudioEngine {
       osc.stop(now + 0.08);
     } catch {}
   }
+
+  // iOS error alert vibration & sound
+  public error() {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate([30, 60, 30]);
+      } catch {}
+    }
+    this.deleteSound();
+  }
 }
 
 export const haptics = new HapticAudioEngine();

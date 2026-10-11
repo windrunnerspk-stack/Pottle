@@ -1,24 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
-  signOut, 
-  signInAnonymously,
-  User 
-} from 'firebase/auth';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  onSnapshot 
-} from 'firebase/firestore';
 import { Transaction, Category, Currency, ICloudDevice, AuthUser } from '../types/finance';
-import { INITIAL_CATEGORIES, INITIAL_TRANSACTIONS, DEMO_TRANSACTIONS, INITIAL_ICLOUD_DEVICES } from '../data/initialData';
-import { auth, db, googleProvider, appleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
+import { INITIAL_CATEGORIES, INITIAL_TRANSACTIONS, DEMO_TRANSACTIONS } from '../data/initialData';
 import { haptics } from '../utils/haptics';
 
 interface StatsSummary {
@@ -33,6 +15,7 @@ interface StatsSummary {
 }
 
 interface FinanceContextType {
+  // Auth state preserved for backward compatibility (defaults to offline/local)
   user: AuthUser | null;
   isAuthLoading: boolean;
   isAuthModalOpen: boolean;
@@ -44,6 +27,8 @@ interface FinanceContextType {
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name?: string) => Promise<void>;
   signOutUser: () => Promise<void>;
+
+  // Transactions & Categories
   transactions: Transaction[];
   categories: Category[];
   addCategory: (cat: Omit<Category, 'id'>) => void;
@@ -51,6 +36,8 @@ interface FinanceContextType {
   deleteCategory: (id: string) => void;
   isCategoryManagerOpen: boolean;
   setIsCategoryManagerOpen: (open: boolean) => void;
+
+  // Navigation & Settings
   selectedMonth: string; // 'YYYY-MM'
   setSelectedMonth: (month: string) => void;
   currency: Currency;
@@ -58,8 +45,8 @@ interface FinanceContextType {
   isCurrencyPickerOpen: boolean;
   setIsCurrencyPickerOpen: (open: boolean) => void;
   confirmCurrency: (c: Currency) => void;
-  activeTab: 'home' | 'calendar' | 'stats' | 'widgets';
-  setActiveTab: (tab: 'home' | 'calendar' | 'stats' | 'widgets') => void;
+  activeTab: 'home' | 'calendar' | 'stats' | 'sync';
+  setActiveTab: (tab: 'home' | 'calendar' | 'stats' | 'sync') => void;
   selectedDay: string | null;
   setSelectedDay: (day: string | null) => void;
   quickEntryCategory: Category | null;
@@ -68,9 +55,16 @@ interface FinanceContextType {
   setIsQuickEntryOpen: (open: boolean) => void;
   isSettingsOpen: boolean;
   setIsSettingsOpen: (open: boolean) => void;
+
+  // Cloud Sync & Backup
+  lastBackupDate: string | null;
+  setLastBackupDate: (date: string) => void;
+  importTransactions: (imported: Transaction[], mode: 'merge' | 'replace') => number;
   iCloudSyncStatus: 'synced' | 'syncing' | 'offline';
   iCloudDevices: ICloudDevice[];
   triggerICloudSync: () => Promise<void>;
+
+  // Data Actions
   addTransaction: (tx: Omit<Transaction, 'id' | 'syncedToICloud'>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
@@ -90,17 +84,12 @@ const STORAGE_KEY_CURRENCY = 'potle_finance_currency_v4';
 const STORAGE_KEY_CURRENCY_CONFIRMED = 'potle_finance_currency_confirmed_v4';
 const STORAGE_KEY_CATEGORIES = 'potle_finance_categories_v4';
 const STORAGE_KEY_SOUND = 'potle_finance_sound_v4';
-const STORAGE_KEY_USER = 'potle_finance_user_v5';
+const STORAGE_KEY_BACKUP = 'potle_finance_last_backup_date_v1';
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_USER);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return null;
-  });
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  // Authenticated state is no longer required - completely offline-first and private
+  const [user] = useState<AuthUser | null>(null);
+  const [isAuthLoading] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -152,13 +141,29 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   });
 
-  const [activeTab, setActiveTabState] = useState<'home' | 'calendar' | 'stats' | 'widgets'>('home');
+  const [activeTab, setActiveTabState] = useState<'home' | 'calendar' | 'stats' | 'sync'>('home');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [quickEntryCategory, setQuickEntryCategory] = useState<Category | null>(null);
   const [isQuickEntryOpen, setIsQuickEntryOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [iCloudSyncStatus, setICloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
-  const [iCloudDevices, setICloudDevices] = useState<ICloudDevice[]>(INITIAL_ICLOUD_DEVICES);
+
+  // 15-day backup tracking
+  const [lastBackupDate, setLastBackupDateState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY_BACKUP);
+    } catch {
+      return null;
+    }
+  });
+
+  const setLastBackupDate = useCallback((date: string) => {
+    setLastBackupDateState(date);
+    try {
+      localStorage.setItem(STORAGE_KEY_BACKUP, date);
+    } catch {}
+  }, []);
+
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SOUND);
@@ -168,12 +173,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   });
 
+  // Save transactions to local storage
   useEffect(() => {
-    haptics.setSoundEnabled(isSoundEnabled);
     try {
-      localStorage.setItem(STORAGE_KEY_SOUND, String(isSoundEnabled));
+      localStorage.setItem(STORAGE_KEY_TX, JSON.stringify(transactions));
     } catch {}
-  }, [isSoundEnabled]);
+  }, [transactions]);
 
   // Save categories to local storage
   useEffect(() => {
@@ -182,216 +187,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch {}
   }, [categories]);
 
-  // Auth state listener & Real-time Firestore sync
+  // Save sound setting
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      setIsAuthLoading(false);
-
-      if (currentUser) {
-        const isApple = currentUser.providerData?.some(p => p.providerId === 'apple.com') || (currentUser.email && currentUser.email.endsWith('@icloud.com'));
-        const isGoogle = currentUser.providerData?.some(p => p.providerId === 'google.com') || (currentUser.email && currentUser.email.endsWith('@gmail.com'));
-        const provider: 'apple' | 'google' | 'email' = isApple ? 'apple' : isGoogle ? 'google' : 'email';
-
-        const mappedUser: AuthUser = {
-          uid: currentUser.uid,
-          email: currentUser.email,
-          displayName: currentUser.displayName || (isApple ? 'Usuario iCloud' : isGoogle ? 'Usuario Gmail' : 'Usuario Potle'),
-          photoURL: currentUser.photoURL,
-          provider,
-        };
-
-        setUser(mappedUser);
-        try {
-          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(mappedUser));
-        } catch {}
-
-        // Register or sync user profile
-        const userRef = doc(db, 'users', currentUser.uid);
-        try {
-          await setDoc(
-            userRef,
-            {
-              uid: currentUser.uid,
-              email: currentUser.email || '',
-              displayName: mappedUser.displayName,
-              photoURL: currentUser.photoURL || '',
-              createdAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
-        } catch (err) {
-          console.warn('User profile sync note:', err);
-        }
-
-        // Attach real-time snapshot on user's transactions
-        const txPath = `users/${currentUser.uid}/transactions`;
-        const txCol = collection(db, 'users', currentUser.uid, 'transactions');
-        const unsubscribeTx = onSnapshot(
-          txCol,
-          (snapshot) => {
-            const remoteTxs: Transaction[] = [];
-            snapshot.forEach((docSnap) => {
-              const data = docSnap.data();
-              remoteTxs.push({
-                id: docSnap.id,
-                userId: data.userId || currentUser.uid,
-                type: data.type || 'expense',
-                amount: Number(data.amount) || 0,
-                categoryId: data.categoryId || 'salidas',
-                note: data.note || '',
-                date: data.date || '2026-10-06',
-                time: data.time || '12:00',
-                createdAt: data.createdAt,
-                syncedToICloud: true,
-              });
-            });
-            remoteTxs.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
-            if (remoteTxs.length > 0) {
-              setTransactions(remoteTxs);
-            }
-          },
-          (error) => {
-            console.warn('Firestore snapshot note:', error);
-          }
-        );
-
-        return () => {
-          unsubscribeTx();
-        };
-      } else {
-        setUser(null);
-        try {
-          localStorage.removeItem(STORAGE_KEY_USER);
-        } catch {}
-      }
-    });
-
-    return () => unsubscribeAuth();
-  }, []);
-
-  // Google Sign-In with official Firebase Provider
-  const signInWithGoogle = useCallback(async () => {
-    setAuthError(null);
-    haptics.tap();
     try {
-      await signInWithPopup(auth, googleProvider);
-      setIsAuthModalOpen(false);
-      haptics.success();
-    } catch (error: unknown) {
-      console.warn('Google Sign-In error:', error);
-      const err = error as { code?: string; message?: string };
-      if (err?.code === 'auth/unauthorized-domain') {
-        setAuthError(
-          'Dominio no autorizado en Firebase Console. Debes añadir "pottle-three.vercel.app" en Firebase Console > Authentication > Settings > Authorized Domains.'
-        );
-      } else if (err?.code === 'auth/popup-blocked') {
-        setAuthError('La ventana emergente fue bloqueada por el navegador. Permite las ventanas emergentes o usa tu correo para acceder.');
-      } else if (err?.code === 'auth/cancelled-popup-request' || err?.code === 'auth/popup-closed-by-user') {
-        // User closed
-      } else {
-        setAuthError(err?.message || 'Error al conectar con Google.');
-      }
-    }
-  }, []);
+      localStorage.setItem(STORAGE_KEY_SOUND, isSoundEnabled ? 'true' : 'false');
+    } catch {}
+  }, [isSoundEnabled]);
 
-  // Apple Sign-In
-  const signInWithApple = useCallback(async () => {
-    setAuthError(null);
-    haptics.tap();
-    try {
-      await signInWithPopup(auth, appleProvider);
-      setIsAuthModalOpen(false);
-      haptics.success();
-    } catch (error: unknown) {
-      console.warn('Apple Sign-In warning:', error);
-      const err = error as { code?: string; message?: string };
-      if (
-        err?.code === 'auth/operation-not-allowed' || 
-        err?.message?.includes('requested action is invalid') || 
-        err?.code === 'auth/invalid-action-code' ||
-        err?.code === 'auth/configuration-not-found'
-      ) {
-        setAuthError(
-          'El proveedor de Apple ID no está habilitado en Firebase Console (requiere certificado de Apple Developer). Para guardar tus finanzas en la nube, ingresa con Google (Gmail) o regístrate con tu correo (puedes usar tu correo @icloud.com).'
-        );
-      } else if (err?.code === 'auth/cancelled-popup-request' || err?.code === 'auth/popup-closed-by-user') {
-        // User closed
-      } else {
-        setAuthError(err?.message || 'Error al conectar con Apple ID. Usa Google o la opción de Correo para guardar en la nube.');
-      }
-    }
-  }, []);
-
-  // Email / Password Sign-In
-  const signInWithEmail = useCallback(async (email: string, pass: string) => {
-    setAuthError(null);
-    haptics.tap();
-    try {
-      await signInWithEmailAndPassword(auth, email, pass);
-      setIsAuthModalOpen(false);
-      haptics.success();
-    } catch (error: unknown) {
-      console.error('Email sign-in error:', error);
-      haptics.deleteSound();
-      const err = error as { code?: string; message?: string };
-      if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/user-not-found' || err?.code === 'auth/wrong-password') {
-        setAuthError('Correo o contraseña incorrectos. Si no tienes cuenta, pulsa en Registrarse.');
-      } else if (err?.code === 'auth/invalid-email') {
-        setAuthError('El formato de correo no es válido.');
-      } else {
-        setAuthError(err?.message || 'Error al iniciar sesión.');
-      }
-      throw error;
-    }
-  }, []);
-
-  // Email / Password Sign-Up
-  const signUpWithEmail = useCallback(async (email: string, pass: string, name?: string) => {
-    setAuthError(null);
-    haptics.tap();
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, email, pass);
-      if (cred.user && name) {
-        await updateProfile(cred.user, { displayName: name });
-      }
-      setIsAuthModalOpen(false);
-      haptics.success();
-    } catch (error: unknown) {
-      console.error('Email sign-up error:', error);
-      haptics.deleteSound();
-      const err = error as { code?: string; message?: string };
-      if (err?.code === 'auth/email-already-in-use') {
-        setAuthError('Este correo ya está registrado. Pulsa en Iniciar sesión.');
-      } else if (err?.code === 'auth/weak-password') {
-        setAuthError('La contraseña debe tener al menos 6 caracteres.');
-      } else {
-        setAuthError(err?.message || 'Error al crear cuenta.');
-      }
-      throw error;
-    }
-  }, []);
-
-  const signOutUser = useCallback(async () => {
-    try {
-      haptics.tap();
-      try {
-        await signOut(auth);
-      } catch {}
-      setUser(null);
-      try {
-        localStorage.removeItem(STORAGE_KEY_USER);
-      } catch {}
-      haptics.deleteSound();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  }, []);
-
-  const toggleSound = useCallback(() => {
-    setIsSoundEnabled((prev) => !prev);
-    haptics.tap();
-  }, []);
-
+  // Currency selection helpers
   const setCurrency = useCallback((c: Currency) => {
     setCurrencyState(c);
     try {
@@ -412,9 +215,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Category management
   const addCategory = useCallback((cat: Omit<Category, 'id'>) => {
-    const id = `cat-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-    const newCategory: Category = { ...cat, id };
-    setCategories((prev) => [newCategory, ...prev]);
+    const id = cat.name.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || `cat_${Date.now()}`;
+    const newCat: Category = { ...cat, id };
+    setCategories((prev) => [...prev, newCat]);
     haptics.success();
   }, []);
 
@@ -428,106 +231,79 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     haptics.deleteSound();
   }, []);
 
-  const setActiveTab = useCallback((tab: 'home' | 'calendar' | 'stats' | 'widgets') => {
+  const setActiveTab = useCallback((tab: 'home' | 'calendar' | 'stats' | 'sync') => {
     haptics.tap();
     setActiveTabState(tab);
   }, []);
 
-  // Save transactions to local storage cache
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_TX, JSON.stringify(transactions));
-    } catch {}
-  }, [transactions]);
-
+  // Trigger manual sync animation
   const triggerICloudSync = useCallback(async () => {
     setICloudSyncStatus('syncing');
     haptics.tap();
-
     await new Promise((resolve) => setTimeout(resolve, 800));
-
     setTransactions((prev) => prev.map((t) => ({ ...t, syncedToICloud: true })));
-
-    setICloudDevices((prev) =>
-      prev.map((dev) =>
-        dev.isCurrent
-          ? { ...dev, lastSync: 'Sincronizado ahora' }
-          : { ...dev, lastSync: 'Hace 1 minuto' }
-      )
-    );
-
     setICloudSyncStatus('synced');
     haptics.success();
   }, []);
 
+  // Import transactions from Excel or Google Drive
+  const importTransactions = useCallback((imported: Transaction[], mode: 'merge' | 'replace'): number => {
+    haptics.success();
+    let finalTxs: Transaction[] = [];
+
+    if (mode === 'replace') {
+      finalTxs = [...imported];
+    } else {
+      // Merge mode: deduplicate based on existing IDs or combination of date+time+amount+note
+      const existingKeys = new Set(
+        transactions.map((t) => `${t.id}_${t.date}_${t.time}_${t.amount}_${t.note}`)
+      );
+      const newItems = imported.filter((t) => !existingKeys.has(`${t.id}_${t.date}_${t.time}_${t.amount}_${t.note}`));
+      finalTxs = [...newItems, ...transactions];
+    }
+
+    // Sort descending by date and time
+    finalTxs.sort((a, b) => (b.date + ' ' + b.time).localeCompare(a.date + ' ' + a.time));
+    setTransactions(finalTxs);
+
+    try {
+      localStorage.setItem(STORAGE_KEY_TX, JSON.stringify(finalTxs));
+    } catch {}
+
+    return imported.length;
+  }, [transactions]);
+
+  // Transaction CRUD
   const addTransaction = useCallback(
     async (txData: Omit<Transaction, 'id' | 'syncedToICloud'>) => {
       const newId = `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const newTx: Transaction = {
         ...txData,
         id: newId,
-        userId: user ? user.uid : undefined,
         createdAt: new Date().toISOString(),
         syncedToICloud: true,
       };
 
       setTransactions((prev) => [newTx, ...prev]);
       haptics.success();
-
-      if (user) {
-        const path = `users/${user.uid}/transactions/${newId}`;
-        try {
-          await setDoc(doc(db, 'users', user.uid, 'transactions', newId), {
-            userId: user.uid,
-            type: txData.type,
-            amount: Number(txData.amount),
-            categoryId: txData.categoryId,
-            note: txData.note || '',
-            date: txData.date,
-            time: txData.time,
-            createdAt: new Date().toISOString(),
-            syncedToICloud: true,
-          });
-        } catch (error) {
-          handleFirestoreError(error, OperationType.CREATE, path);
-        }
-      }
     },
-    [user]
+    []
   );
 
   const deleteTransaction = useCallback(
     async (id: string) => {
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       haptics.deleteSound();
-
-      if (user) {
-        const path = `users/${user.uid}/transactions/${id}`;
-        try {
-          await deleteDoc(doc(db, 'users', user.uid, 'transactions', id));
-        } catch (error) {
-          handleFirestoreError(error, OperationType.DELETE, path);
-        }
-      }
     },
-    [user]
+    []
   );
 
   const updateTransaction = useCallback(
     async (id: string, updates: Partial<Transaction>) => {
       setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
       haptics.tap();
-
-      if (user) {
-        const path = `users/${user.uid}/transactions/${id}`;
-        try {
-          await setDoc(doc(db, 'users', user.uid, 'transactions', id), updates, { merge: true });
-        } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, path);
-        }
-      }
     },
-    [user]
+    []
   );
 
   const resetData = useCallback(() => {
@@ -559,7 +335,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         type: 'expense',
         amount,
         categoryId,
-        note: note || `Gasto widget: ${category?.name || 'Varios'}`,
+        note: note || `Gasto rápido: ${category?.name || 'Varios'}`,
         date: dateStr,
         time: timeStr,
       });
@@ -589,9 +365,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           totalIncome += tx.amount;
         } else {
           totalExpenses += tx.amount;
-          categoryTotals[tx.categoryId] = (categoryTotals[tx.categoryId] || 0) + tx.amount;
-          expenseDays.add(tx.date);
         }
+        categoryTotals[tx.categoryId] = (categoryTotals[tx.categoryId] || 0) + tx.amount;
+        expenseDays.add(tx.date);
       }
     });
 
@@ -604,7 +380,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     });
 
-    const topExpenseCategory = topCatId ? categories.find((c) => c.id === topCatId) || null : null;
+    const topExpenseCategory = categories.find((c) => c.id === topCatId) || null;
     const daysWithExpensesCount = expenseDays.size;
     const dailyAverageExpense = daysWithExpensesCount > 0 ? totalExpenses / daysWithExpensesCount : 0;
 
@@ -619,6 +395,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       categoryTotals,
     };
   }, [transactions, selectedMonth, categories]);
+
+  const toggleSound = useCallback(() => {
+    setIsSoundEnabled((prev) => !prev);
+    haptics.tap();
+  }, []);
+
+  // Safe dummy auth methods (no-ops) so legacy references never fail
+  const signInWithGoogle = useCallback(async () => {}, []);
+  const signInWithApple = useCallback(async () => {}, []);
+  const signInWithEmail = useCallback(async () => {}, []);
+  const signUpWithEmail = useCallback(async () => {}, []);
+  const signOutUser = useCallback(async () => {}, []);
 
   return (
     <FinanceContext.Provider
@@ -658,8 +446,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setIsQuickEntryOpen,
         isSettingsOpen,
         setIsSettingsOpen,
+        lastBackupDate,
+        setLastBackupDate,
+        importTransactions,
         iCloudSyncStatus,
-        iCloudDevices,
+        iCloudDevices: [],
         triggerICloudSync,
         addTransaction,
         deleteTransaction,

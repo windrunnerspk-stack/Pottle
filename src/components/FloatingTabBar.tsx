@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Calendar, BarChart3, Plus, LayoutGrid } from 'lucide-react';
+import { Home, Calendar, BarChart3, Plus, CloudUpload } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { haptics } from '../utils/haptics';
 
@@ -72,18 +72,18 @@ export const FloatingTabBar: React.FC = () => {
           <span className="text-[10px] mt-0.5 tracking-tight">Análisis</span>
         </button>
 
-        {/* Tab 4: Widgets & iCloud */}
+        {/* Tab 4: Sincronización & Drive (Sync) */}
         <button
-          onClick={() => setActiveTab('widgets')}
+          onClick={() => setActiveTab('sync')}
           className={`flex flex-col items-center justify-center flex-1 h-full min-h-[44px] transition-all duration-200 ${
-            activeTab === 'widgets'
+            activeTab === 'sync'
               ? 'text-slate-900 scale-105 font-medium'
               : 'text-stone-400 hover:text-stone-600'
           }`}
-          aria-label="Widgets e iCloud"
+          aria-label="Sincronización y Google Drive"
         >
-          <LayoutGrid className={`w-5 h-5 ${activeTab === 'widgets' ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
-          <span className="text-[10px] mt-0.5 tracking-tight">Widgets</span>
+          <CloudUpload className={`w-5 h-5 ${activeTab === 'sync' ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
+          <span className="text-[10px] mt-0.5 tracking-tight">Sync</span>
         </button>
       </nav>
     </div>

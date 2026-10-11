@@ -11,13 +11,12 @@ import { FloatingTabBar } from './components/FloatingTabBar';
 import { HomeDashboard } from './components/HomeDashboard';
 import { FlightFareCalendar } from './components/FlightFareCalendar';
 import { StatisticsView } from './components/StatisticsView';
-import { WidgetsICloudView } from './components/WidgetsICloudView';
+import { SyncBackupView } from './components/SyncBackupView';
 import { QuickEntryModal } from './components/QuickEntryModal';
 import { CalendarDaySheet } from './components/CalendarDaySheet';
 import { SettingsModal } from './components/SettingsModal';
 import { CurrencyPickerModal } from './components/CurrencyPickerModal';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
-import { AuthModal } from './components/AuthModal';
 
 const AppContent: React.FC = () => {
   const { activeTab, setActiveTab } = useFinance();
@@ -25,14 +24,14 @@ const AppContent: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full w-full relative overflow-hidden select-none">
       {/* iOS Top Status Bar & Dynamic Island */}
-      <DynamicIsland onTap={() => setActiveTab('widgets')} />
+      <DynamicIsland onTap={() => setActiveTab('sync')} />
 
       {/* Main Active Screen */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {activeTab === 'home' && <HomeDashboard />}
         {activeTab === 'calendar' && <FlightFareCalendar />}
         {activeTab === 'stats' && <StatisticsView />}
-        {activeTab === 'widgets' && <WidgetsICloudView />}
+        {activeTab === 'sync' && <SyncBackupView />}
       </main>
 
       {/* Floating Bottom Tab Bar */}
@@ -44,7 +43,6 @@ const AppContent: React.FC = () => {
       <SettingsModal />
       <CurrencyPickerModal />
       <CategoryManagerModal />
-      <AuthModal />
     </div>
   );
 };

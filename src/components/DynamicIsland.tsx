@@ -56,7 +56,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ onTap }) => {
             <div className="flex items-center gap-1.5 text-emerald-400">
               <Cloud className="w-3.5 h-3.5 animate-pulse" />
               <span className="text-[11px] font-medium text-slate-100">
-                {iCloudSyncStatus === 'syncing' ? 'iCloud sincronizando…' : 'iCloud Activo'}
+                Respaldo & Drive Sync
               </span>
             </div>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
